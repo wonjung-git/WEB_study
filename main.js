@@ -6,8 +6,6 @@ document.addEventListener('DOMContentLoaded', function () {
     const confirmationMessage = document.getElementById('confirmation-message');
 
     // --- Configuration ---
-    // In a real application, this would come from a backend.
-    // Here we define a static schedule for the next 3 days.
     const schedule = {
         "days": 3,
         "slots": [
@@ -47,72 +45,89 @@ document.addEventListener('DOMContentLoaded', function () {
             scheduleContainer.appendChild(dayDiv);
         }
     }
+    
+    // --- Load Bookings and Update UI ---
+    async function loadBookings() {
+        try {
+            const response = await fetch('/api/bookings');
+            const bookings = await response.json();
+            
+            bookings.forEach(booking => {
+                const slotEl = document.querySelector(`.time-slot[data-datetime="${booking.selected_time}"]`);
+                if (slotEl) {
+                    slotEl.classList.add('disabled');
+                }
+            });
+        } catch (error) {
+            console.error('Error loading bookings:', error);
+        }
+    }
 
     // --- Event Listeners ---
     scheduleContainer.addEventListener('click', function(e) {
         if (e.target.classList.contains('time-slot') && !e.target.classList.contains('disabled')) {
-            // Clear previous selection
             const currentSelected = document.querySelector('.time-slot.selected');
             if (currentSelected) {
                 currentSelected.classList.remove('selected');
             }
-
-            // Mark new selection
             e.target.classList.add('selected');
-            
-            // Update form
             selectedTimeInput.value = e.target.dataset.datetime;
             submitButton.disabled = false;
         }
     });
 
-    bookingForm.addEventListener('submit', function(e) {
-        e.preventDefault(); // Prevent default submission
+    bookingForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const name = document.getElementById('user-name').value;
+        const email = document.getElementById('user-email').value;
+        const selected_time = selectedTimeInput.value;
+        
+        if(!selected_time) {
+            alert('시간을 선택해주세요.');
+            return;
+        }
 
-        const form = e.target;
-        const data = new FormData(form);
-        const selectedSlot = document.querySelector('.time-slot.selected');
-
-        // Show loading state on button (optional)
         submitButton.textContent = '처리 중...';
         submitButton.disabled = true;
 
-        fetch(form.action, {
-            method: form.method,
-            body: data,
-            headers: {
-                'Accept': 'application/json'
-            }
-        }).then(response => {
+        try {
+            const response = await fetch('/api/bookings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, email, selected_time })
+            });
+
             if (response.ok) {
-                // Success!
                 bookingForm.style.display = 'none';
                 confirmationMessage.style.display = 'block';
+                const selectedSlot = document.querySelector('.time-slot.selected');
                 if (selectedSlot) {
                     selectedSlot.classList.add('disabled');
                     selectedSlot.classList.remove('selected');
                 }
             } else {
-                // Error
-                response.json().then(data => {
-                    if (Object.hasOwn(data, 'errors')) {
-                        alert(data["errors"].map(error => error["message"]).join(", "));
-                    } else {
-                        alert('예약 중 오류가 발생했습니다. 다시 시도해주세요.');
-                    }
-                });
-                // Restore button
+                const errorData = await response.json();
+                alert(errorData.message || '예약 중 오류가 발생했습니다.');
+                // Refresh bookings to get the latest status
+                await loadBookings();
+                 // re-enable button
                 submitButton.textContent = '예약하기';
                 submitButton.disabled = false;
             }
-        }).catch(error => {
-            alert('네트워크 오류가 발생했습니다. 다시 시도해주세요.');
-            // Restore button
+        } catch (error) {
+            console.error('Error submitting booking:', error);
+            alert('네트워크 오류가 발생했습니다.');
             submitButton.textContent = '예약하기';
             submitButton.disabled = false;
-        });
+        }
     });
 
     // --- Initial Call ---
-    generateSchedule();
+    async function initialize() {
+        generateSchedule();
+        await loadBookings();
+    }
+
+    initialize();
 });
