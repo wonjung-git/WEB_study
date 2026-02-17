@@ -5,6 +5,9 @@ document.addEventListener('DOMContentLoaded', function () {
     const submitButton = document.getElementById('submit-button');
     const confirmationMessage = document.getElementById('confirmation-message');
 
+    // Formspree URL for additional notification
+    const FORMSPREE_URL = "https://formspree.io/f/mgolyrjb";
+
     // --- Configuration ---
     const schedule = {
         "days": 3,
@@ -92,29 +95,52 @@ document.addEventListener('DOMContentLoaded', function () {
         submitButton.disabled = true;
 
         try {
-            const response = await fetch('/api/bookings', {
+            // First, send to our Cloudflare Function for booking persistence
+            const cfResponse = await fetch('/api/bookings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name, email, selected_time })
             });
 
-            if (response.ok) {
-                bookingForm.style.display = 'none';
-                confirmationMessage.style.display = 'block';
-                const selectedSlot = document.querySelector('.time-slot.selected');
-                if (selectedSlot) {
-                    selectedSlot.classList.add('disabled');
-                    selectedSlot.classList.remove('selected');
-                }
-            } else {
-                const errorData = await response.json();
+            if (!cfResponse.ok) {
+                const errorData = await cfResponse.json();
                 alert(errorData.message || '예약 중 오류가 발생했습니다.');
-                // Refresh bookings to get the latest status
-                await loadBookings();
-                 // re-enable button
+                await loadBookings(); // Refresh bookings to get the latest status
                 submitButton.textContent = '예약하기';
                 submitButton.disabled = false;
+                return; // Stop if Cloudflare Function booking failed
             }
+
+            // If Cloudflare Function booking was successful, send to Formspree for notification
+            const formspreeData = new FormData();
+            formspreeData.append('name', name);
+            formspreeData.append('email', email);
+            formspreeData.append('selected_time', selected_time);
+
+            fetch(FORMSPREE_URL, {
+                method: 'POST',
+                body: formspreeData,
+                headers: {
+                    'Accept': 'application/json'
+                }
+            }).then(formspreeResponse => {
+                if (!formspreeResponse.ok) {
+                    console.error('Formspree notification failed. Status:', formspreeResponse.status);
+                    // Optionally alert user or log server-side if critical
+                }
+            }).catch(formspreeError => {
+                console.error('Formspree network error:', formspreeError);
+            });
+
+            // UI updates after successful Cloudflare Function booking
+            bookingForm.style.display = 'none';
+            confirmationMessage.style.display = 'block';
+            const selectedSlot = document.querySelector('.time-slot.selected');
+            if (selectedSlot) {
+                selectedSlot.classList.add('disabled');
+                selectedSlot.classList.remove('selected');
+            }
+
         } catch (error) {
             console.error('Error submitting booking:', error);
             alert('네트워크 오류가 발생했습니다.');
