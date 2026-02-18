@@ -5,6 +5,11 @@ document.addEventListener('DOMContentLoaded', function () {
     const submitButton = document.getElementById('submit-button');
     const confirmationMessage = document.getElementById('confirmation-message');
 
+    const userNameInput = document.getElementById('user-name');
+    const userEmailInput = document.getElementById('user-email');
+    const userPhoneInput = document.getElementById('user-phone');
+
+
     // Formspree URL for additional notification
     const FORMSPREE_URL = "https://formspree.io/f/mgolyrjb";
 
@@ -66,6 +71,16 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    // --- Validation and Submit Button State ---
+    function validateForm() {
+        const isTimeSelected = !!selectedTimeInput.value;
+        const isNameFilled = !!userNameInput.value.trim();
+        const isEmailFilled = !!userEmailInput.value.trim();
+        const isPhoneFilled = !!userPhoneInput.value.trim();
+        
+        submitButton.disabled = !(isTimeSelected && isNameFilled && isEmailFilled && isPhoneFilled);
+    }
+
     // --- Event Listeners ---
     scheduleContainer.addEventListener('click', function(e) {
         if (e.target.classList.contains('time-slot') && !e.target.classList.contains('disabled')) {
@@ -75,15 +90,20 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             e.target.classList.add('selected');
             selectedTimeInput.value = e.target.dataset.datetime;
-            submitButton.disabled = false;
+            validateForm(); // Validate form when time is selected
         }
     });
+
+    userNameInput.addEventListener('input', validateForm);
+    userEmailInput.addEventListener('input', validateForm);
+    userPhoneInput.addEventListener('input', validateForm);
 
     bookingForm.addEventListener('submit', async function(e) {
         e.preventDefault();
         
-        const name = document.getElementById('user-name').value;
-        const email = document.getElementById('user-email').value;
+        const name = userNameInput.value;
+        const email = userEmailInput.value;
+        const phone = userPhoneInput.value;
         const selected_time = selectedTimeInput.value;
         
         if(!selected_time) {
@@ -99,7 +119,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const cfResponse = await fetch('/api/bookings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, email, selected_time })
+                body: JSON.stringify({ name, email, phone, selected_time })
             });
 
             if (!cfResponse.ok) {
@@ -107,7 +127,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 alert(errorData.message || '예약 중 오류가 발생했습니다.');
                 await loadBookings(); // Refresh bookings to get the latest status
                 submitButton.textContent = '예약하기';
-                submitButton.disabled = false;
+                validateForm(); // Re-validate form after failed attempt
                 return; // Stop if Cloudflare Function booking failed
             }
 
@@ -115,6 +135,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const formspreeData = new FormData();
             formspreeData.append('name', name);
             formspreeData.append('email', email);
+            formspreeData.append('phone', phone);
             formspreeData.append('selected_time', selected_time);
 
             fetch(FORMSPREE_URL, {
@@ -145,7 +166,7 @@ document.addEventListener('DOMContentLoaded', function () {
             console.error('Error submitting booking:', error);
             alert('네트워크 오류가 발생했습니다.');
             submitButton.textContent = '예약하기';
-            submitButton.disabled = false;
+            validateForm(); // Re-validate form after network error
         }
     });
 
@@ -153,7 +174,9 @@ document.addEventListener('DOMContentLoaded', function () {
     async function initialize() {
         generateSchedule();
         await loadBookings();
+        validateForm(); // Initial validation on page load
     }
 
     initialize();
 });
+

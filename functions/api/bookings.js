@@ -29,7 +29,7 @@ async function handlePost(context) {
         const { XR_BOOKINGS_KV } = env;
         const newBooking = await request.json();
 
-        if (!newBooking.name || !newBooking.email || !newBooking.selected_time) {
+        if (!newBooking.name || !newBooking.email || !newBooking.phone || !newBooking.selected_time) {
             return new Response(JSON.stringify({ message: 'All fields are required.' }), { status: 400 });
         }
 
